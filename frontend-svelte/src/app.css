@@ -1,0 +1,85 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* ARES Design System 1.0 Palette */
+  --ares-deep-space: #080D16;
+  --ares-mission-navy: #101A29;
+  --ares-elevated-navy: #172538;
+  --ares-signal-cyan: #36C5E8;
+  --ares-ice-blue: #A5E8F5;
+  --ares-alert-amber: #F2A93B;
+  --ares-critical-red: #EF5555;
+  --ares-telemetry-green: #54C99A;
+
+  /* Subtle Scientific Borders */
+  --ares-border-subtle: #142033;
+  --ares-border-default: #1E2D42;
+  --ares-border-bright: #2A3E5B;
+
+  /* Typography */
+  --font-title: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+@layer base {
+  body {
+    @apply bg-ares-deep text-slate-200 font-sans min-h-screen overflow-x-hidden selection:bg-ares-cyan/20 selection:text-ares-cyan;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-title tracking-tight text-white;
+  }
+}
+
+/* Scientific Panels & Surfaces */
+.ares-panel {
+  @apply bg-ares-navy border border-ares-border rounded-ares-md shadow-ares-panel relative overflow-hidden;
+}
+
+.ares-panel-elevated {
+  @apply bg-ares-elevated border border-ares-border hover:border-ares-border-bright transition-all duration-150 rounded-ares-md shadow-ares-panel;
+}
+
+.ares-panel-interactive {
+  @apply bg-ares-navy border border-ares-border hover:border-ares-border-bright transition-colors duration-150 rounded-ares-md;
+}
+
+/* Scientific Typography Utilities */
+.hud-label {
+  @apply text-[10px] uppercase tracking-wider font-mono text-slate-400 font-semibold;
+}
+
+.hud-value {
+  @apply font-mono font-bold tracking-tight text-white;
+}
+
+.hud-reticle-corner {
+  @apply pointer-events-none absolute w-2 h-2 border-ares-cyan/40;
+}
+
+/* Scientific Grid Graticule Overlay */
+.tactical-grid-bg {
+  background-image: 
+    linear-gradient(to right, rgba(30, 45, 66, 0.25) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(30, 45, 66, 0.25) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* Custom Scrollbar - Minimal & Scientific */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: #080D16;
+}
+::-webkit-scrollbar-thumb {
+  background: #1E2D42;
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #2A3E5B;
+}
