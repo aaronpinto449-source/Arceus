@@ -35,8 +35,7 @@ class RoverType(str, Enum):
 
 
 class AlgorithmUsed(str, Enum):
-    DIJKSTRA_POI_GRAPH  = "DIJKSTRA-POI-GRAPH"   # Dijkstra over verified POI waypoint graph
-    HAVERSINE_DIRECT    = "HAVERSINE-DIRECT"       # Great-circle straight line, no intermediate waypoints
+    HAVERSINE_DIRECT    = "HAVERSINE-DIRECT"  # Great-circle straight line; no terrain routing
 
 
 class DataSourceMode(str, Enum):
@@ -141,26 +140,10 @@ class DataSourceInfo(BaseModel):
     mode:            DataSourceMode
     description:     str
     dem_available:   bool  = False
-    mola_tiles_used: bool  = True
+    mola_tiles_used: bool  = False
     resolution_note: str
     coordinate_system: str = "IAU Planetocentric Latitude (°N), East Longitude (°E)"
     mars_radius_km:    float = 3389.5
-    # Fix #5 — expose snap threshold in API response
-    snap_threshold_deg: float = Field(
-        default=0.05,
-        description=(
-            "POI coordinate snap tolerance in degrees. "
-            "If a supplied start or destination coordinate lies within this angular "
-            "distance of a verified POI, it is snapped to that POI and a warning is issued. "
-            "0.05° ≈ 3 km at the Mars equatorial radius."
-        ),
-    )
-    snap_threshold_km_approx: str = Field(
-        default="~3 km (computed at Mars equatorial radius 3396.2 km)",
-        description="Human-readable approximate snap threshold distance.",
-    )
-
-
 class RoverFeasibility(BaseModel):
     rover_range_km:     float
     total_distance_km:  float
