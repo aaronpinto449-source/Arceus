@@ -13,37 +13,24 @@ No real Digital Elevation Model (DEM) is loaded. Therefore:
   - Hazard classification   → UNAVAILABLE
   - Elevation profile       → UNAVAILABLE
 
-What IS computed (from verified POI coordinates):
+What IS computed (from request coordinates):
   - Great-circle distance   → CALCULATED  (Haversine formula, Mars mean radius 3389.5 km)
   - Initial bearing         → CALCULATED  (standard geodetic formula)
   - Travel duration         → ESTIMATED   (distance ÷ stated nominal rover speed, flat terrain)
 
 Priority mode behaviour
 -----------------------
-DIRECT   — single great-circle leg, start → destination.
-BALANCED — route through any verified intermediate POIs that lie
-           between start and destination (using Dijkstra on the
-           POI graph). Geometry is unchanged; more waypoints shown.
-SAFETY   — identical geometry to BALANCED, plus a warning reminding
-           planners to survey each leg before traversal.
-
-No distance multipliers are applied. Priority does NOT change
-calculated distances or make a route "safer" — that would require
-real terrain data we do not have.
-
-NetworkX is used only for Dijkstra over the POI graph (already
-listed in requirements.txt). It is NOT used for A* or terrain grids.
+All priorities currently return the same direct great-circle estimate.
+BALANCED and SAFETY do not have terrain or hazard data with which to
+select alternate paths. SAFETY adds a survey reminder only.
 """
 
 from __future__ import annotations
 
 import math
-import copy
-from typing import List, Tuple, Optional, Dict, Any
+from typing import List, Tuple, Dict, Any
 
-import networkx as nx
-
-from backend.app.core.config import REGION_BOUNDS, REGION_POIS
+from backend.app.core.config import REGION_BOUNDS
 from backend.app.core.route_models import (
     AlgorithmUsed,
     Coordinate,
@@ -68,12 +55,6 @@ from backend.app.core.route_models import (
 
 MARS_MEAN_RADIUS_KM: float = 3389.5  # IAU 2000 / IAG standard, used for Haversine
 
-# Fix #5 — named constant for the POI snap tolerance; documented in API response metadata.
-# 0.05° at Mars equatorial radius (3396.2 km) ≈ 2.96 km.
-# Any supplied coordinate within this angular distance of a verified POI is snapped
-# to that POI before graph construction.  A warning is always issued when snapping occurs.
-POI_SNAP_THRESHOLD_DEG: float = 0.05
-
 # Rover specs — illustrative operational parameters from NASA MSL/MER engineering
 # documentation. These are NOT certified safety limits.
 ROVER_SPECS: Dict[RoverType, Dict[str, Any]] = {
@@ -94,9 +75,6 @@ ROVER_SPECS: Dict[RoverType, Dict[str, Any]] = {
     },
 }
 
-# Fix #1 — DISTANCE description clarified: it means "direct Haversine line, no intermediate
-# POI waypoints", NOT "terrain-aware shortest path".  The enum value is unchanged for API
-# compatibility; the description field is what developers and the UI should read.
 PRIORITY_EXPLANATIONS: Dict[RoutePriority, Dict[str, str]] = {
     RoutePriority.DISTANCE: {
         "description": (
@@ -105,8 +83,7 @@ PRIORITY_EXPLANATIONS: Dict[RoutePriority, Dict[str, str]] = {
             "straight line between the two coordinates — it is NOT a terrain-aware "
             "shortest-path calculation. The name DISTANCE refers to minimising waypoint "
             "count (and therefore segment count), not to finding the shortest traversable "
-            "surface path, which would require real terrain data. To route via verified "
-            "intermediate POIs, use BALANCED or SAFETY."
+            "surface path, which would require real terrain data."
         ),
         "effect_on_geometry": (
             "One segment from start to destination. Great-circle distance is the "
@@ -114,26 +91,21 @@ PRIORITY_EXPLANATIONS: Dict[RoutePriority, Dict[str, str]] = {
             "No intermediate POIs are visited."
         ),
         "effect_on_waypoints": (
-            "No intermediate POIs included. Start and destination may still be "
-            "snapped to the nearest verified POI if within the snap threshold "
-            f"({POI_SNAP_THRESHOLD_DEG}° ≈ ~3 km)."
+            "No intermediate POIs are included. The submitted start and destination "
+            "coordinates are preserved exactly; no POI snapping is applied."
         ),
     },
     RoutePriority.BALANCED: {
         "description": (
-            "Waypoint route: Dijkstra over the complete verified-POI graph. "
-            "Returns the minimum-distance path that visits intermediate verified POIs "
-            "between start and destination. Edge weights are great-circle distances only — "
-            "no terrain multipliers are applied. With few POIs (currently 3 per region) "
-            "the result is often the same as DISTANCE unless a POI lies between the endpoints."
+            "Currently returns the same direct great-circle estimate as DISTANCE. "
+            "No terrain or hazard data is available to select or validate waypoints."
         ),
         "effect_on_geometry": (
-            "Total distance may be greater than DISTANCE if intermediate POIs are "
-            "off the direct line. Segments are individually labelled with verified POI names."
+            "One direct great-circle segment is returned. This is geometric distance, "
+            "not a traversable surface route."
         ),
         "effect_on_waypoints": (
-            "Dijkstra selects the minimum cumulative great-circle distance path "
-            "through the full POI graph. All region POIs are eligible as waypoints."
+            "No intermediate POIs are added. Submitted endpoint coordinates are preserved."
         ),
     },
     RoutePriority.SAFETY: {
@@ -147,8 +119,8 @@ PRIORITY_EXPLANATIONS: Dict[RoutePriority, Dict[str, str]] = {
             "Identical to BALANCED. No change to distance or bearing calculations."
         ),
         "effect_on_waypoints": (
-            "Same POI graph as BALANCED. An additional warning string is appended "
-            "to the response warnings[] list recommending orbital survey before traversal."
+            "Same direct geometry as the other priorities. An additional survey reminder "
+            "is included in the warnings list."
         ),
     },
 }
@@ -244,32 +216,12 @@ def _make_segment(
 
 
 # ---------------------------------------------------------------------------
-# POI snap helper
+# Solver — direct great-circle line
 # ---------------------------------------------------------------------------
-
-def _nearest_poi(coord: Coordinate, pois: List[Dict], tolerance_deg: float = POI_SNAP_THRESHOLD_DEG) -> Optional[Dict]:
-    """
-    Return the nearest POI if it lies within tolerance_deg of coord, else None.
-
-    Default tolerance is POI_SNAP_THRESHOLD_DEG (0.05° ≈ 3 km at Mars equatorial radius).
-    When a snap occurs, the caller issues a warning in the response warnings[] list.
-    The snap threshold is also exposed in DataSourceInfo.snap_threshold_deg.
-    """
-    best, best_d = None, float("inf")
-    for poi in pois:
-        d = math.hypot(poi["lat"] - coord.lat, poi["lon"] - coord.lon)
-        if d < best_d:
-            best_d, best = d, poi
-    return best if best_d <= tolerance_deg else None
-
 
 def _coord_as_node(coord: Coordinate, label: str) -> Dict[str, Any]:
     return {"id": f"__{label}__", "name": label, "lat": coord.lat, "lon": coord.lon, "_is_poi": False}
 
-
-# ---------------------------------------------------------------------------
-# Solver — direct great-circle line
-# ---------------------------------------------------------------------------
 
 def _solve_direct(
     request: RoutePlanRequest,
@@ -280,101 +232,11 @@ def _solve_direct(
     seg = _make_segment(0, start_node, dest_node)
     coords = [seg.from_coord, seg.to_coord]
     warnings.append(
-        "DIRECT priority selected: single great-circle leg used. "
-        "No intermediate waypoints are included. This straight line does not "
-        "represent a driveable surface path — actual traversal distance is "
-        "longer due to Martian topography."
+        "A single great-circle leg is returned for every priority. "
+        "No intermediate waypoints or terrain checks are applied. This geometric "
+        "estimate does not represent a driveable surface path."
     )
     return coords, [seg]
-
-
-# ---------------------------------------------------------------------------
-# Solver — Dijkstra over verified POI graph
-# ---------------------------------------------------------------------------
-
-def _solve_poi_graph(
-    request: RoutePlanRequest,
-    pois: List[Dict[str, Any]],
-    warnings: List[str],
-) -> Tuple[List[RouteCoordinate], List[RouteSegment]]:
-    """
-    Build a complete weighted graph of verified POIs plus start/destination,
-    then run Dijkstra (minimum total distance path).
-
-    Edge weights = Haversine great-circle distance. No terrain multipliers.
-
-    Fix #4: pois is the caller's deep-copy of REGION_POIS — we still avoid
-    mutating it here by using dict-spread to add _is_poi, so the original
-    shared config remains untouched even if the caller forgets to deep-copy.
-    """
-    # Build local node dicts WITHOUT mutating the original poi dicts.
-    # {**p, "_is_poi": True} creates a new dict each time.
-    nodes: List[Dict[str, Any]] = [{**p, "_is_poi": True} for p in pois]
-
-    # Add start node unless it snaps to an existing POI
-    start_snap = _nearest_poi(request.start, pois)
-    dest_snap  = _nearest_poi(request.destination, pois)
-
-    if start_snap:
-        start_id = start_snap["id"]
-        warnings.append(
-            f"Start coordinate snapped to nearest verified POI: '{start_snap['name']}' "
-            f"(within 0.05° ≈ 3 km)."
-        )
-    else:
-        start_node = _coord_as_node(request.start, "Start")
-        nodes.append(start_node)
-        start_id = start_node["id"]
-
-    if dest_snap:
-        dest_id = dest_snap["id"]
-        warnings.append(
-            f"Destination coordinate snapped to nearest verified POI: '{dest_snap['name']}' "
-            f"(within 0.05° ≈ 3 km)."
-        )
-    else:
-        dest_node = _coord_as_node(request.destination, "Destination")
-        nodes.append(dest_node)
-        dest_id = dest_node["id"]
-
-    # Build complete undirected graph (edge weight = great-circle distance, no multiplier)
-    G = nx.Graph()
-    node_map: Dict[str, Dict] = {}
-    for n in nodes:
-        G.add_node(n["id"], **n)
-        node_map[n["id"]] = n
-
-    for i, na in enumerate(nodes):
-        for nb in nodes[i + 1:]:
-            dist = haversine_km(na["lat"], na["lon"], nb["lat"], nb["lon"])
-            G.add_edge(na["id"], nb["id"], weight=dist)
-
-    try:
-        path_ids: List[str] = nx.dijkstra_path(G, start_id, dest_id, weight="weight")
-    except nx.NetworkXNoPath:
-        warnings.append(
-            "Dijkstra found no path through POI graph (graph may be disconnected). "
-            "Falling back to direct great-circle line."
-        )
-        return _solve_direct(request, warnings)
-
-    # Build coordinates and segments from path
-    coords: List[RouteCoordinate] = []
-    segments: List[RouteSegment]  = []
-
-    for idx, nid in enumerate(path_ids):
-        nd = node_map[nid]
-        coords.append(RouteCoordinate(
-            lat=nd["lat"], lon=nd["lon"],
-            label=nd["name"],
-            is_poi=nd.get("_is_poi", False),
-            provenance=ProvenanceLabel.CALCULATED,
-        ))
-        if idx > 0:
-            prev = node_map[path_ids[idx - 1]]
-            segments.append(_make_segment(idx - 1, prev, nd))
-
-    return coords, segments
 
 
 # ---------------------------------------------------------------------------
@@ -435,11 +297,11 @@ def plan_route(request: RoutePlanRequest) -> RoutePlanResponse:
     data_source = DataSourceInfo(
         mode=DataSourceMode.GEOMETRY_ONLY,
         description=(
-            "Route computed from verified POI coordinates using great-circle "
-            "(Haversine) geometry. No terrain model is used."
+            "Route computed from the submitted coordinates using great-circle "
+            "(Haversine) geometry. POIs are not used to alter the endpoints."
         ),
         dem_available=False,
-        mola_tiles_used=True,
+        mola_tiles_used=False,
         resolution_note=(
             "MOLA MEG256 tiles are present for visual display only "
             "(7680×7680 px per 30°×30° tile, 256 px/degree, ~231 m/px latitudinal). "
@@ -447,20 +309,9 @@ def plan_route(request: RoutePlanRequest) -> RoutePlanResponse:
         ),
     )
 
-    # 3. Solve
-    pois: List[Dict[str, Any]] = REGION_POIS.get(request.region_id, [])
-
-    if request.priority == RoutePriority.DISTANCE or len(pois) < 2:
-        if len(pois) < 2:
-            warnings.append(
-                f"Region '{request.region_id}' has fewer than 2 verified POIs; "
-                "using direct great-circle route."
-            )
-        coords, segments = _solve_direct(request, warnings)
-        algorithm = AlgorithmUsed.HAVERSINE_DIRECT
-    else:
-        coords, segments = _solve_poi_graph(request, pois, warnings)
-        algorithm = AlgorithmUsed.DIJKSTRA_POI_GRAPH
+    # 3. Geometry-only solver: preserve the supplied endpoints for all priorities.
+    coords, segments = _solve_direct(request, warnings)
+    algorithm = AlgorithmUsed.HAVERSINE_DIRECT
 
     if request.priority == RoutePriority.SAFETY:
         warnings.append(
@@ -476,7 +327,7 @@ def plan_route(request: RoutePlanRequest) -> RoutePlanResponse:
     if total_distance_km < 1e-6:
         raise ValueError(
             "Computed route distance is effectively zero — "
-            "start and destination may be identical after coordinate snapping."
+            "start and destination may be identical."
         )
 
     # 5. Rover feasibility
