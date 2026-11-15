@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Node
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Editor and OS
+.idea/
+.DS_Store
+Thumbs.db
+
+# Keep MOLA map images tracked
+# (Do not ignore data/raw/*.png)
