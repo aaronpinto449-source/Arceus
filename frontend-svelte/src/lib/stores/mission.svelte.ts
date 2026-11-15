@@ -1,4 +1,14 @@
-import type { NavigationPage, InterfaceMode, Region, PointOfInterest, SelectedTarget, MissionTelemetry } from '../types';
+import type { 
+  NavigationPage, 
+  InterfaceMode, 
+  Region, 
+  PointOfInterest, 
+  SelectedTarget, 
+  MissionTelemetry,
+  RoutePlanResponse,
+  RoutePriority,
+  RoverType
+} from '../types';
 import { INITIAL_REGIONS } from '../data/regions';
 import { api } from '../services/api';
 
@@ -13,6 +23,11 @@ class MissionStore {
   sidebarOpen = $state<boolean>(true);
   rightDrawerOpen = $state<boolean>(false);
   activeModal = $state<string | null>(null);
+
+  // Route Planning State
+  routeResult = $state<RoutePlanResponse | null>(null);
+  routeLoading = $state<boolean>(false);
+  routeError = $state<string | null>(null);
 
   telemetry = $state<MissionTelemetry>({
     sol: '001',
@@ -58,6 +73,39 @@ class MissionStore {
     this.activeRegionId = regionId;
     this.selectedTarget = null;
     this.selectedPoi = null;
+    this.routeResult = null;
+    this.routeError = null;
+  }
+
+  async planRoute(
+    start: { lat: number; lon: number },
+    destination: { lat: number; lon: number },
+    roverType: RoverType = 'PCR',
+    priority: RoutePriority = 'BALANCED'
+  ): Promise<RoutePlanResponse | null> {
+    this.routeLoading = true;
+    this.routeError = null;
+    try {
+      const result = await api.planRoute({
+        region_id: this.activeRegionId,
+        start,
+        destination,
+        rover_type: roverType,
+        priority
+      });
+      this.routeResult = result;
+      return result;
+    } catch (err: any) {
+      this.routeError = err?.message || 'Failed to compute route';
+      return null;
+    } finally {
+      this.routeLoading = false;
+    }
+  }
+
+  clearRoute() {
+    this.routeResult = null;
+    this.routeError = null;
   }
 
   setInterfaceMode(mode: InterfaceMode) {

@@ -1,10 +1,10 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
-  import { CheckCircle2, Calculator, Cpu, AlertTriangle, AlertOctagon, ShieldCheck } from '@lucide/svelte';
+  import { CheckCircle2, Calculator, Cpu, AlertTriangle, AlertOctagon, ShieldCheck, Clock, HelpCircle } from '@lucide/svelte';
 
   interface Props {
     variant?: 'cyan' | 'amber' | 'red' | 'green' | 'neutral';
-    provenance?: 'measured' | 'calculated' | 'simulated';
+    provenance?: 'measured' | 'calculated' | 'simulated' | 'estimated' | 'unavailable';
     hazardLevel?: 'nominal' | 'elevated' | 'critical';
     label?: string;
     children?: Snippet;
@@ -48,6 +48,18 @@
       <Cpu size={10} class="shrink-0" />
       <span>[SIMULATED]</span>
       {#if label}<span class="font-normal text-slate-300">| {label}</span>{/if}
+    </span>
+  {:else if provenance === 'estimated'}
+    <span class={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-ares-sm text-[10px] font-mono font-bold tracking-wider uppercase border bg-ares-cyan/15 text-slate-200 border-ares-cyan/30 ${extraClass}`} title="Estimated figure derived from assumed operational parameters">
+      <Clock size={10} class="shrink-0 text-ares-cyan" />
+      <span>[ESTIMATED]</span>
+      {#if label}<span class="font-normal text-slate-300">| {label}</span>{/if}
+    </span>
+  {:else if provenance === 'unavailable'}
+    <span class={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-ares-sm text-[10px] font-mono font-bold tracking-wider uppercase border bg-slate-800/80 text-slate-400 border-slate-700 ${extraClass}`} title="Data layer is unavailable; no synthetic values fabricated">
+      <HelpCircle size={10} class="shrink-0 text-slate-500" />
+      <span>[UNAVAILABLE]</span>
+      {#if label}<span class="font-normal text-slate-400">| {label}</span>{/if}
     </span>
   {/if}
 

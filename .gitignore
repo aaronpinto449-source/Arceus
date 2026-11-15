@@ -9,11 +9,18 @@ node_modules/
 dist/
 dist-ssr/
 *.local
+*.tsbuildinfo
 
 # Editor and OS
 .idea/
 .DS_Store
 Thumbs.db
+desktop.ini
+*.qgz~
 
-# Keep MOLA map images tracked
-# (Do not ignore data/raw/*.png)
+# Large external imagery files exceeding GitHub 100MB limit
+data/raw/jezero/Mars_MOLA_blend200ppx_HRSC_ClrShade_clon0dd_200mpp_lzw.tif
+*.tif.aux.xml
+
+# Keep MOLA map images and DEMs tracked
+# (Do not ignore data/raw/*.png, data/raw/*.npy, data/raw/*.json, or 6m CTX tif)

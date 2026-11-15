@@ -1,6 +1,22 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { mission } from '../../stores/mission.svelte';
-  import { Microscope, Award, Bookmark, Crosshair, CheckCircle2 } from '@lucide/svelte';
+  import { api } from '../../services/api';
+  import { Microscope, Award, Bookmark, Crosshair, ExternalLink, Globe, Compass, ShieldAlert } from '@lucide/svelte';
+
+  let challengeData = $state<{
+    challenge: string;
+    challenge_url: string;
+    resources: Record<string, any>;
+  } | null>(null);
+
+  onMount(async () => {
+    try {
+      challengeData = await api.getChallengeResources();
+    } catch {
+      // Handled gracefully via fallback in api.ts
+    }
+  });
 </script>
 
 <div class="p-4 md:p-6 flex flex-col gap-6 max-w-7xl mx-auto">
@@ -105,5 +121,73 @@
       </div>
     </div>
   </div>
+
+  <!-- Official NASA Space Apps Challenge 2026 Resources Panel -->
+  {#if challengeData}
+    <div class="aerospace-panel p-5 flex flex-col gap-4 border-t-2 border-ares-cyan">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-space-border/60 pb-3">
+        <div class="flex items-center gap-2">
+          <Globe size={18} class="text-ares-cyan" />
+          <div>
+            <h3 class="text-sm font-bold text-white tracking-wide">
+              OFFICIAL NASA SPACE APPS CHALLENGE 2026 RESOURCES
+            </h3>
+            <p class="text-[11px] text-slate-400 font-mono">
+              Challenge: {challengeData.challenge}
+            </p>
+          </div>
+        </div>
+        <a
+          href={challengeData.challenge_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="text-[11px] font-mono text-ares-cyan hover:underline flex items-center gap-1 shrink-0"
+        >
+          <span>Official Portal</span>
+          <ExternalLink size={12} />
+        </a>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {#each Object.entries(challengeData.resources) as [key, res]}
+          <div class={`p-4 rounded border flex flex-col justify-between gap-3 font-mono text-xs transition-colors ${
+            res.is_mars_specific 
+              ? 'bg-space-900/80 border-space-border hover:border-ares-cyan/50' 
+              : 'bg-space-950/60 border-space-border/50 opacity-90'
+          }`}>
+            <div class="flex flex-col gap-1.5">
+              <div class="flex items-center justify-between gap-2">
+                <span class={`text-[10px] font-bold px-1.5 py-0.5 rounded border uppercase ${
+                  res.is_mars_specific
+                    ? 'text-ares-cyan bg-ares-cyan/10 border-ares-cyan/30'
+                    : 'text-slate-400 bg-slate-800 border-slate-700'
+                }`}>
+                  {res.is_mars_specific ? 'Mars Resource' : 'General Reference'}
+                </span>
+                <span class="text-[10px] text-slate-400 truncate">{res.authority}</span>
+              </div>
+
+              <div class="font-bold text-white text-sm mt-1">{res.title}</div>
+              <div class="text-[11px] text-ares-amber">{res.category}</div>
+              <p class="text-[11px] text-slate-300 font-sans leading-relaxed mt-1">{res.description}</p>
+            </div>
+
+            <div class="pt-2 border-t border-space-border/50 flex items-center justify-between text-[11px]">
+              <span class="text-slate-400 text-[10px]">{key}</span>
+              <a
+                href={res.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                class="text-ares-cyan hover:underline flex items-center gap-1 font-semibold"
+              >
+                <span>Access Data</span>
+                <ExternalLink size={11} />
+              </a>
+            </div>
+          </div>
+        {/each}
+      </div>
+    </div>
+  {/if}
 </div>
 

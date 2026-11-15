@@ -5,7 +5,7 @@ Coordinate convention: Planetocentric latitude (°N), East longitude (°E).
 All derived geometry uses the IAU mean Mars radius (3389.5 km).
 
 Data provenance labels used throughout this module:
-  CALCULATED  — derived from verified coordinates by exact mathematics
+  CALCULATED  — derived from verified coordinates / DEM by exact mathematics
   ESTIMATED   — computed from an explicitly stated assumption
   UNAVAILABLE — cannot be provided; required data does not exist
   SIMULATED   — illustrative placeholder; not derived from real data
@@ -14,7 +14,7 @@ Data provenance labels used throughout this module:
 from __future__ import annotations
 
 from enum import Enum
-from typing import List, Optional
+from typing import List, Optional, Union
 from pydantic import BaseModel, Field, model_validator
 
 
@@ -35,17 +35,17 @@ class RoverType(str, Enum):
 
 
 class AlgorithmUsed(str, Enum):
-    DIJKSTRA_POI_GRAPH  = "DIJKSTRA-POI-GRAPH"   # Dijkstra over verified POI waypoint graph
-    HAVERSINE_DIRECT    = "HAVERSINE-DIRECT"       # Great-circle straight line, no intermediate waypoints
+    HAVERSINE_DIRECT    = "HAVERSINE-DIRECT"   # Direct great-circle geometry; endpoints preserved
+    DIJKSTRA_POI_GRAPH  = "DIJKSTRA-POI-GRAPH" # Dijkstra over verified POI waypoint graph
 
 
 class DataSourceMode(str, Enum):
-    GEOMETRY_ONLY = "GEOMETRY_ONLY"   # Great-circle distance from verified coordinates; no terrain data
-    MEASURED      = "MEASURED"         # Reserved for future real DEM integration
+    GEOMETRY_ONLY = "GEOMETRY_ONLY"   # Great-circle distance from verified coordinates; no DEM used
+    MEASURED      = "MEASURED"         # Physical terrain measured from verified numerical DEM
 
 
 class ProvenanceLabel(str, Enum):
-    CALCULATED  = "CALCULATED"   # Exact mathematics from verified input coordinates
+    CALCULATED  = "CALCULATED"   # Exact mathematics from verified input coordinates or DEM
     ESTIMATED   = "ESTIMATED"    # Computed from a stated assumption (e.g. nominal rover speed)
     UNAVAILABLE = "UNAVAILABLE"  # Required data does not exist in this system
     SIMULATED   = "SIMULATED"    # Illustrative placeholder, not derived from real data
@@ -66,6 +66,7 @@ class RoutePlanRequest(BaseModel):
     destination: Coordinate    = Field(...,                  description="Arrival coordinate")
     rover_type:  RoverType     = Field(RoverType.PCR,        description="Surface vehicle type")
     priority:    RoutePriority = Field(RoutePriority.BALANCED, description="Traversal planning preference")
+    use_dem:     bool          = Field(True,                 description="If True and numerical DEM is present, evaluates elevation and slope")
 
     @model_validator(mode="after")
     def start_and_dest_differ(self) -> "RoutePlanRequest":
@@ -80,10 +81,10 @@ class RoutePlanRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 class RouteCoordinate(BaseModel):
-    lat:        float          = Field(..., description="Planetocentric latitude (°N)")
-    lon:        float          = Field(..., description="East longitude (°E)")
-    label:      Optional[str]  = Field(None, description="Waypoint name")
-    is_poi:     bool           = Field(False, description="True if this is a verified NASA POI")
+    lat:        float           = Field(..., description="Planetocentric latitude (°N)")
+    lon:        float           = Field(..., description="East longitude (°E)")
+    label:      Optional[str]   = Field(None, description="Waypoint name")
+    is_poi:     bool            = Field(False, description="True if this is a verified NASA POI")
     provenance: ProvenanceLabel = Field(ProvenanceLabel.CALCULATED)
 
 
@@ -97,19 +98,13 @@ class RouteSegment(BaseModel):
     bearing_deg:  float           = Field(..., description="[CALCULATED] Initial bearing (°, 0=N, clockwise)")
     distance_provenance: ProvenanceLabel = Field(ProvenanceLabel.CALCULATED)
     bearing_provenance:  ProvenanceLabel = Field(ProvenanceLabel.CALCULATED)
-    # Fix #3 — per-segment obstacle disclaimer
     geometry_caveat: str = Field(
         default=(
             "This segment is a straight great-circle line between two coordinates. "
-            "It has not been checked against actual surface terrain, obstacles, or "
-            "impassable features. The actual traversal path will be longer than the "
-            "calculated great-circle distance."
+            "The actual traversal path will be longer than the calculated great-circle distance "
+            "due to surface obstacles and topography."
         ),
-        description=(
-            "Reminder that this segment is a geometric approximation only. "
-            "It does not account for craters, scarps, lava flows, or any other "
-            "surface feature between the two endpoints."
-        ),
+        description="Caveat detailing geometric approximation vs actual traversal path.",
     )
 
 
@@ -125,40 +120,64 @@ class TravelTimeEstimate(BaseModel):
 
 class UnavailableField(BaseModel):
     """Represents a data field that cannot be populated due to missing source data."""
-    supported: bool  = False
+    supported:  bool            = False
     provenance: ProvenanceLabel = Field(ProvenanceLabel.UNAVAILABLE)
-    reason:    str
+    reason:     str
+
+
+class ElevationSample(BaseModel):
+    distance_km: float = Field(..., description="Distance from start along route (km)")
+    lat:         float = Field(..., description="Sample latitude (°N)")
+    lon:         float = Field(..., description="Sample longitude (°E)")
+    elevation_m: float = Field(..., description="Elevation relative to MOLA areoid (m)")
+
+
+class ElevationProfileData(BaseModel):
+    supported:          bool            = True
+    provenance:         ProvenanceLabel = Field(ProvenanceLabel.CALCULATED)
+    min_elevation_m:    float
+    max_elevation_m:    float
+    start_elevation_m:  float
+    end_elevation_m:    float
+    elevation_change_m: float
+    elevation_gain_m:   float
+    samples:            List[ElevationSample] = Field(default_factory=list)
+
+
+class SlopeAnalysisData(BaseModel):
+    supported:                 bool            = True
+    provenance:                ProvenanceLabel = Field(ProvenanceLabel.CALCULATED)
+    min_slope_deg:             float
+    max_slope_deg:             float
+    mean_slope_deg:            float
+    steep_slopes_detected:     bool  = False
+    max_recommended_slope_deg: float = 15.0
+
+
+class TerrainCostData(BaseModel):
+    supported:     bool            = True
+    provenance:    ProvenanceLabel = Field(ProvenanceLabel.CALCULATED)
+    cost_index:    float
+    slope_penalty: float
 
 
 class PriorityModeExplanation(BaseModel):
-    mode:        RoutePriority
-    description: str
-    effect_on_geometry: str
+    mode:                RoutePriority
+    description:         str
+    effect_on_geometry:  str
     effect_on_waypoints: str
 
 
 class DataSourceInfo(BaseModel):
-    mode:            DataSourceMode
-    description:     str
-    dem_available:   bool  = False
-    mola_tiles_used: bool  = True
-    resolution_note: str
-    coordinate_system: str = "IAU Planetocentric Latitude (°N), East Longitude (°E)"
-    mars_radius_km:    float = 3389.5
-    # Fix #5 — expose snap threshold in API response
-    snap_threshold_deg: float = Field(
-        default=0.05,
-        description=(
-            "POI coordinate snap tolerance in degrees. "
-            "If a supplied start or destination coordinate lies within this angular "
-            "distance of a verified POI, it is snapped to that POI and a warning is issued. "
-            "0.05° ≈ 3 km at the Mars equatorial radius."
-        ),
-    )
-    snap_threshold_km_approx: str = Field(
-        default="~3 km (computed at Mars equatorial radius 3396.2 km)",
-        description="Human-readable approximate snap threshold distance.",
-    )
+    mode:                     DataSourceMode
+    description:              str
+    dem_available:            bool  = False
+    mola_tiles_used:          bool  = False
+    resolution_note:          str
+    coordinate_system:        str   = "IAU Planetocentric Latitude (°N), East Longitude (°E)"
+    mars_radius_km:           float = 3389.5
+    snap_threshold_deg:       Optional[float] = 0.05
+    snap_threshold_km_approx: Optional[str]   = "~3 km (computed at Mars equatorial radius 3396.2 km)"
 
 
 class RoverFeasibility(BaseModel):
@@ -166,8 +185,10 @@ class RoverFeasibility(BaseModel):
     total_distance_km:  float
     within_range:       bool
     margin_km:          float
+    return_trip_km:     float = Field(default=0.0, description="[CALCULATED] Round-trip traversal distance (km)")
+    return_feasible:    bool  = Field(default=False, description="[CALCULATED] Whether round-trip is within vehicle nominal range")
+    return_margin_km:   float = Field(default=0.0, description="[CALCULATED] Range margin for return trip (km)")
     provenance:         ProvenanceLabel = Field(ProvenanceLabel.CALCULATED)
-    # Fix #2 — rover range caveat
     range_caveat: str = Field(
         default=(
             "Vehicle range figures are illustrative planning assumptions, not verified "
@@ -175,9 +196,7 @@ class RoverFeasibility(BaseModel):
             "power consumption rate, crew schedule, thermal conditions, and mission "
             "constraints. These values should not be used as certified operational limits."
         ),
-        description=(
-            "Disclaimer that rover range_km is an illustrative figure, not a certified specification."
-        ),
+        description="Disclaimer that rover range_km is an illustrative figure, not a certified specification.",
     )
 
 
@@ -197,11 +216,11 @@ class RoutePlanResponse(BaseModel):
     # Travel time  [ESTIMATED]
     travel_time:          Optional[TravelTimeEstimate] = None
 
-    # Unavailable fields — honest gaps, not fake numbers
-    terrain_cost:         UnavailableField
-    slope_data:           UnavailableField
+    # Terrain fields — populated from DEM when available, otherwise UnavailableField
+    terrain_cost:         Union[TerrainCostData, UnavailableField]
+    slope_data:           Union[SlopeAnalysisData, UnavailableField]
     hazard_exposure:      UnavailableField
-    elevation_profile:    UnavailableField
+    elevation_profile:    Union[ElevationProfileData, UnavailableField]
 
     # Priority mode explanation
     priority_explanation: PriorityModeExplanation
@@ -218,9 +237,8 @@ class RoutePlanResponse(BaseModel):
 
     scientific_disclaimer: str = (
         "Route segments are great-circle (straight-line) geometric approximations "
-        "between verified waypoint coordinates on a spherical Mars model "
-        "(IAU mean radius 3389.5 km). Actual surface paths are longer due to "
-        "topography. No terrain, slope, elevation, or hazard data is used. "
-        "This output is a geometric planning aid and must NOT be used for "
-        "real astronaut navigation decisions."
+        "between submitted coordinates on a spherical Mars model (IAU mean radius 3389.5 km). "
+        "When DEM data is loaded, elevation profiles and slope calculations are derived from "
+        "validated 200m numerical rasters. No classified hazard layer is loaded. "
+        "This output is a planning aid and must NOT be used for real astronaut navigation decisions."
     )

@@ -1,0 +1,39 @@
+{
+  "dataset_id": "gale-crater-dem",
+  "target_region": "gale-crater",
+  "region_name": "Gale Crater",
+  "source_dataset": "USGS Mars MGS MOLA - MEX HRSC Blended DEM Global 200m (v2)",
+  "source_url": "https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Mars/HRSC_MOLA_Blend/Mars_HRSC_MOLA_BlendDEM_Global_200mp_v2.tif",
+  "format": "NPY_2D_SCALAR_ARRAY",
+  "file_name": "gale_crater_dem.npy",
+  "dtype": "int16",
+  "nodata_value": -32768,
+  "units": "meters relative to MOLA areoid",
+  "vertical_datum": "Mars MOLA Areoid (IAU/IAG 2000 Mars Sphere R=3396190m)",
+  "horizontal_crs": "Planetocentric Latitude, East Longitude",
+  "shape": [
+    593,
+    593
+  ],
+  "pixel_width": 593,
+  "pixel_height": 593,
+  "angular_resolution_deg_per_px": 0.003374120830641,
+  "ground_resolution_lat_m_per_px": 200.0,
+  "ground_resolution_lon_m_per_px": 199.24,
+  "bounds": {
+    "lat_min": -6.0005,
+    "lat_max": -3.9996,
+    "lon_min": 136.4993,
+    "lon_max": 138.5001,
+    "display_lon_min": 136.5,
+    "display_lon_max": 138.5
+  },
+  "elevation_stats": {
+    "min_m": -4688,
+    "max_m": 813,
+    "mean_m": -2914.51,
+    "has_nodata": false
+  },
+  "verified": true,
+  "extraction_time_s": 14.69
+}

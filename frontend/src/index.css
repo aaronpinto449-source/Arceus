@@ -1,0 +1,47 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-space-950 text-slate-200 font-sans min-h-screen overflow-x-hidden;
+  }
+}
+
+/* Custom Aerospace Mission-Control Styling */
+.aerospace-panel {
+  @apply bg-space-900 border border-space-border rounded-lg shadow-lg relative overflow-hidden backdrop-blur-md;
+}
+
+.aerospace-panel-glow {
+  @apply bg-space-900/90 border border-space-border hover:border-space-border-bright transition-all duration-200 rounded-lg shadow-lg;
+}
+
+.hud-label {
+  @apply text-[10px] uppercase tracking-widest font-mono text-slate-400 font-bold;
+}
+
+.hud-value {
+  @apply font-mono font-bold tracking-tight text-white;
+}
+
+.hud-reticle-corner {
+  @apply pointer-events-none absolute w-2 h-2 border-ares-cyan;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #090d14;
+}
+::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #334155;
+}
+

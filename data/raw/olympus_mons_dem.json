@@ -1,0 +1,39 @@
+{
+  "dataset_id": "olympus-mons-dem",
+  "target_region": "olympus-mons",
+  "region_name": "Olympus Mons",
+  "source_dataset": "USGS Mars MGS MOLA - MEX HRSC Blended DEM Global 200m (v2)",
+  "source_url": "https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Mars/HRSC_MOLA_Blend/Mars_HRSC_MOLA_BlendDEM_Global_200mp_v2.tif",
+  "format": "NPY_2D_SCALAR_ARRAY",
+  "file_name": "olympus_mons_dem.npy",
+  "dtype": "int16",
+  "nodata_value": -32768,
+  "units": "meters relative to MOLA areoid",
+  "vertical_datum": "Mars MOLA Areoid (IAU/IAG 2000 Mars Sphere R=3396190m)",
+  "horizontal_crs": "Planetocentric Latitude, East Longitude",
+  "shape": [
+    1039,
+    1483
+  ],
+  "pixel_width": 1483,
+  "pixel_height": 1039,
+  "angular_resolution_deg_per_px": 0.003374120830641,
+  "ground_resolution_lat_m_per_px": 200.0,
+  "ground_resolution_lon_m_per_px": 189.39,
+  "bounds": {
+    "lat_min": 16.9975,
+    "lat_max": 20.5032,
+    "lon_min": -137.5029,
+    "lon_max": -132.4991,
+    "display_lon_min": 222.5,
+    "display_lon_max": 227.5
+  },
+  "elevation_stats": {
+    "min_m": 7094,
+    "max_m": 21226,
+    "mean_m": 14160.7,
+    "has_nodata": false
+  },
+  "verified": true,
+  "extraction_time_s": 23.82
+}
